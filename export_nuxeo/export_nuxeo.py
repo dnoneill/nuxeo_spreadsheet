@@ -738,7 +738,7 @@ def google_object(filepath, url):
     nx = utils.Nuxeo()
     scope = ['https://spreadsheets.google.com/feeds',
     'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('client_secret.json', scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name('../client_secret.json', scope)
     client = gspread.authorize(creds)
     with open("temp.csv", "wb") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=obj['fieldnames'])
@@ -759,7 +759,7 @@ def google_item(filepath, url):
     nx = utils.Nuxeo()
     scope = ['https://spreadsheets.google.com/feeds',
     'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('client_secret.json', scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name('../client_secret.json', scope)
     client = gspread.authorize(creds)
     with open("temp.csv", "wb") as csvfile: #creates temporary csv file
         writer = csv.DictWriter(csvfile, fieldnames=item['fieldnames'])
