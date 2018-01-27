@@ -11,9 +11,9 @@ try:
 except:
     filepath = input('Enter Nuxeo File Path: ')
 try:
-    choice = raw_input('Object Level (ENTER O) or Item Level (ENTER I): ')
+    depth = raw_input('Enter how many tiers to harvest: ')
 except:
-    choice = input('Object Level (ENTER O) or Item Level (ENTER I): ')
+    depth = input('Enter how many tiers to harvest: ')
 try:
     url = raw_input('Enter Google Sheet URL: ')
 except:
@@ -635,12 +635,11 @@ def get_physical_location(data2, x, all_headers):
     elif all_headers == 'y' or all_headers == 'Y':
         data2['Physical Location'] = ''
 
-def object_level(filepath):
+def get_item_metadata(filepath):
     nx = utils.Nuxeo()
     data = []
     for n in nx.children(filepath):
         data2 = {}
-        
         get_title(data2, n)
         get_filepath(data2, n)
         get_type(data2, n, all_headers)
@@ -675,76 +674,22 @@ def object_level(filepath):
 
         data.append(data2)
 
-    fieldnames = ['File path', 'Title', 'Type'] #ensures that File path, Title and Type are the first three rows
+    fieldnames = ['File path', 'Title'] #ensures that File path, Title and Type are the first three rows
     for data2 in data:
         for key, value in data2.items():
             if key not in fieldnames:
                 fieldnames.append(key)
 
-    return {'fieldnames':fieldnames, 'data':data, 'filename':"nuxeo_object_%s.tsv"%nx.get_metadata(path=filepath)['properties']['dc:title']}
+    return {'fieldnames':fieldnames, 'data':data}
 
-def item_level(filepath):
-    nx = utils.Nuxeo()
-    data = []
-    for n in nx.children(filepath):
-        for x in nx.children(n['path']):
-            data2 = {}
-            get_title(data2, x)
-            get_filepath(data2, x)
-            get_type(data2, x, all_headers)
-            get_alt_title(data2, x, all_headers)
-            get_identifier(data2, x, all_headers)
-            get_local_identifier(data2, x, all_headers)
-            get_campus_unit(data2, x, all_headers)
-            get_date(data2, x, all_headers)
-            get_publication(data2, x, all_headers)
-            get_creator(data2, x, all_headers)
-            get_contributor(data2, x, all_headers)
-            get_format(data2, x, all_headers)
-            get_description(data2, x, all_headers)
-            get_extent(data2, x, all_headers)
-            get_language(data2, x, all_headers)
-            get_temporal_coverage(data2, x, all_headers)
-            get_transcription(data2, x, all_headers)
-            get_access_restrictions(data2, x, all_headers)
-            get_rights_statement(data2, x, all_headers)
-            get_rights_status(data2, x, all_headers)
-            get_copyright_holder(data2, x, all_headers)
-            get_copyright_info(data2, x, all_headers)
-            get_collection(data2, x, all_headers)
-            get_related_resource(data2, x, all_headers)
-            get_source(data2, x, all_headers)
-            get_subject_name(data2, x, all_headers)
-            get_place(data2, x, all_headers)
-            get_subject_topic(data2, x, all_headers)
-            get_form_genre(data2, x, all_headers)
-            get_provenance(data2, x, all_headers)
-            get_physical_location(data2, x, all_headers)
-            data.append(data2)
-
-    fieldnames = ['File path', 'Title', 'Type'] #ensures that File path, Title and Type are the first three rows
-    for data2 in data:
-        for key, value in data2.items():
-            if key not in fieldnames:
-                fieldnames.append(key)
-
-    return {'fieldnames':fieldnames, 'data':data, 'filename':"nuxeo_item_%s.tsv"%nx.get_metadata(path=filepath)['properties']['dc:title']}
-	#returns dictionary with fieldnames, data and filename; This is used for google functions and writing to tsv if google function not choosed
-
-def google_object(filepath, url):
+def write_google(url):
     import gspread
     from oauth2client.service_account import ServiceAccountCredentials
-    obj = object_level(filepath)
     nx = utils.Nuxeo()
     scope = ['https://spreadsheets.google.com/feeds',
     'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('client_secret.json', scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name('../client_secret.json', scope)
     client = gspread.authorize(creds)
-    with open("temp.csv", "wb") as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=obj['fieldnames'])
-        writer.writeheader()
-        for row in obj['data']:
-            writer.writerow(row)
     with open("temp.csv", encoding="utf8") as f:
         s = f.read() + '\n'
     sheet_id = client.open_by_url(url).id
@@ -752,50 +697,39 @@ def google_object(filepath, url):
     client.open_by_key(sheet_id).sheet1.update_title("nuxeo_object_%s"%nx.get_metadata(path=filepath)['properties']['dc:title'])
     os.remove("temp.csv")
 
-def google_item(filepath, url):
-    import gspread
-    from oauth2client.service_account import ServiceAccountCredentials
-    item = item_level(filepath)
-    nx = utils.Nuxeo()
-    scope = ['https://spreadsheets.google.com/feeds',
-    'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('client_secret.json', scope)
-    client = gspread.authorize(creds)
-    with open("temp.csv", "wb") as csvfile: #creates temporary csv file
-        writer = csv.DictWriter(csvfile, fieldnames=item['fieldnames'])
-        writer.writeheader()
-        for row in item['data']:
-            writer.writerow(row)
-    with open("temp.csv", encoding="utf8") as f: #opens and reads temporary csv file
-        s = f.read() + '\n'
-    sheet_id = client.open_by_url(url).id 
-    client.import_csv(sheet_id, s)#writes csv file to google sheet
-    client.open_by_key(sheet_id).sheet1.update_title("nuxeo_item_%s"%nx.get_metadata(path=filepath)['properties']['dc:title'])
-    os.remove("temp.csv") #removes temporary csv
+def write_tsv(all_data, filename):
+	with open(filename, "wb") as csvfile:
+		if ".tsv" in filename:
+			writer = csv.DictWriter(csvfile, fieldnames=list(set(all_data['fieldnames'])), delimiter="\t")
+		else:
+			writer = csv.DictWriter(csvfile, fieldnames=list(set(all_data['fieldnames'])))
+		writer.writeheader()
+		for dictionary in all_data['data']:
+			for row in dictionary:
+				writer.writerow(row)
 
-if 'O' in choice or 'o' in choice:
-    if 'http' in url:
-        try:
-            google_object(filepath, url)
-        except:
-            print("\n*********\nWriting to Google document did not work. Make sure that Google document has been shared with API key email address")
-    else:
-        obj = object_level(filepath)
-        with open(obj['filename'], "wb") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=obj['fieldnames'], delimiter="\t")
-            writer.writeheader()
-            for row in obj['data']:
-                writer.writerow(row)
-if 'I' in choice or 'i' in choice:
-    if 'http' in url:
-        try:
-            google_item(filepath, url)
-        except:
-            print("\n*********\nWriting to Google document did not work. Make sure that Google document has been shared with API key email address")
-    else:
-        item = item_level(filepath)
-        with open(item['filename'], "wb") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=item['fieldnames'], delimiter="\t")
-            writer.writeheader()
-            for row in item['data']:
-                writer.writerow(row)
+def main():
+	all_data = {'fieldnames': ['File path', 'Title'], 'data': [], 'filename':'test'}
+	filename = filepath.replace("/", "_")
+	paths = [filepath]
+
+	for i in range(int(depth)):
+		nx = utils.Nuxeo()
+		for path in paths:
+			for n in nx.children(path):
+				paths.append(n['path'])
+
+	paths = list(set(paths))
+	for path in paths:
+		obj_data = get_item_metadata(path)
+		all_data['fieldnames'].extend(obj_data['fieldnames'])
+		all_data['data'].append(obj_data['data'])
+
+	if 'google' not in url:
+		write_tsv(all_data, "%s.tsv"%filename)
+	else:
+		write_tsv(all_data, "temp.csv")
+		write_google(url)
+
+if __name__ == '__main__':
+    main()
